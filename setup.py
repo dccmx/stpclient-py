@@ -14,7 +14,7 @@ distutils.core.setup(
         },
     author="dccmx",
     author_email="dccmx@dccmx.com",
-    url="http://www.simpletp.org",
+    url="http://simpletp.org",
     download_url="https://github.com/dccmx/stpclient/tarball/%s" % version,
     license="MIT",
     description="stpclient is an client lib that communicate with simpletp server",
