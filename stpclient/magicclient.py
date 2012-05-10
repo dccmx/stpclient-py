@@ -10,7 +10,7 @@ class MagicClient(local):
 
     def __getattr__(self, name):
         def stpcall(*args):
-            resp = self.client.call((name,) + args)
+            resp = self.client.call((name,) + args).argv
             if resp[0] == 'ERR':
                 raise Exception(resp[1])
             else:

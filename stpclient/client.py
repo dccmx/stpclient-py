@@ -176,8 +176,8 @@ class AsyncClient(object):
 
     def add_call(self, request, callback):
         if not isinstance(request, STPReqeust):
-            if isinstance(request, list):
-                request = STPReqeust(request)
+            if isinstance(request, list) or isinstance(request, tuple):
+                request = STPReqeust(list(request))
             else :
                 request = STPReqeust([request])
         callback = callback
