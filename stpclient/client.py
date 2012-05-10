@@ -64,7 +64,21 @@ class STPResponse(object):
             raise self.error
 
 
+class LazySTPResponse(object):
+    def __init__(self):
+        self._response = STPResponse()
+
+    @property
+    def response(self):
+        return self._response
+
+
 class Connection(object):
+    # Constants for connection state
+    _CLOSED = 0x001
+    _CONNECTING = 0x002
+    _STREAMING = 0x004
+
     def __init__(self, io_loop, client, connect_timeout=None, max_buffer_size=104857600):
         self.io_loop = io_loop
         self.client = client
@@ -76,6 +90,7 @@ class Connection(object):
         self._request_queue = collections.deque()
         self._request = None
         self._response = STPResponse()
+        self._state = Connection._CLOSED
 
     def close(self):
         if self.stream is not None and not self.stream.closed():
@@ -83,6 +98,7 @@ class Connection(object):
         self.stream = None
 
     def _connect(self):
+        self._state = Connection._CONNECTING
         af = socket.AF_INET if self.client.unix_socket is None else socket.AF_UNIX
         self.stream = IOStream(socket.socket(af, socket.SOCK_STREAM),
                                 io_loop=self.io_loop,
@@ -97,6 +113,7 @@ class Connection(object):
         if self._timeout is not None:
             self.io_loop.remove_timeout(self._timeout)
             self._timeout = None
+        self._state = Connection._STREAMING
         self._send_request()
 
     def _on_timeout(self):
@@ -105,21 +122,29 @@ class Connection(object):
                                         error=STPTimeoutError('Timeout')))
         self.stream.close()
         self.stream = None
+        self._state = Connection._CLOSED
+        self._request = None
+        if len(self._request_queue) > 0:
+            self._connect_and_send_request()
 
     def _on_close(self):
         self._run_callback(STPResponse(request_time=time.time() - self.start_time,
                                         error=STPNetworkError('Connection error')))
+        self._state = Connection._CLOSED
+        self._request = None
+        if len(self._request_queue) > 0:
+            self._connect_and_send_request()
 
     def send_request(self, request, callback):
         self._request_queue.append((request, callback))
         self._connect_and_send_request()
 
     def _connect_and_send_request(self):
-        if len(self._request_queue) > 0:
+        if len(self._request_queue) > 0 and self._request is None:
             self._request, self._callback = self._request_queue.popleft()
-            if self.stream is None:
+            if self.stream is None or self._state == Connection._CLOSED:
                 self._connect()
-            else:
+            elif self._state == Connection._STREAMING:
                 self._send_request()
 
     def _send_request(self):
@@ -146,6 +171,8 @@ class Connection(object):
             self._response = STPResponse()
             response.request_time = time.time() - self.start_time
             self._run_callback(response)
+            self._request = None
+            self._connect_and_send_request()
         else:
             try:
                 arglen = int(data[:-2])
@@ -174,11 +201,14 @@ class AsyncClient(object):
     def close(self):
         self.connection.close()
 
-    def add_call(self, request, callback):
+    def lazy_call(self, request):
+        return LazySTPResponse()
+
+    def call(self, request, callback):
         if not isinstance(request, STPReqeust):
             if isinstance(request, list) or isinstance(request, tuple):
                 request = STPReqeust(list(request))
-            else :
+            else:
                 request = STPReqeust([request])
         callback = callback
         self.connection.send_request(request, callback)
@@ -207,7 +237,7 @@ class Client(object):
         def callback(response):
             self._response = response
             self._io_loop.stop()
-        self._async_client.add_call(request, callback)
+        self._async_client.call(request, callback)
         self._io_loop.start()
         response = self._response
         self._response = None
