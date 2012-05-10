@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 # coding: utf-8
 import argparse
 import os
@@ -27,12 +27,12 @@ del os, histfile
 def main():
     client = Client(args.host, args.port, unix_socket=args.socket)
     while True:
-        line = raw_input('telstp %s>: ' % str(client.connection))
+        line = raw_input('telstp %s>: ' % str(client))
         if line == 'quit':
             break
         try:
-            ret = client.call(line.split())
-            for r in ret:
+            resp = client.call(line.split())
+            for r in resp.argv:
                 print r
         except Exception, e:
             print str(e)
