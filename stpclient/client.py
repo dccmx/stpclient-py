@@ -65,11 +65,19 @@ class STPResponse(object):
 
 
 class LazySTPResponse(object):
-    def __init__(self):
-        self._response = STPResponse()
+    def __init__(self, io_loop):
+        self._io_loop = io_loop
+        self._response = None
+
+    def __call__(self, resp):
+        self._response = resp
+        self._io_loop.stop()
 
     @property
     def response(self):
+        while self._response is None:
+            self._io_loop.start()
+        self._response.rethrow()
         return self._response
 
 
@@ -120,7 +128,8 @@ class Connection(object):
         self._timeout = None
         self._run_callback(STPResponse(request_time=time.time() - self.start_time,
                                         error=STPTimeoutError('Timeout')))
-        self.stream.close()
+        if self.stream is not None:
+            self.stream.close()
         self.stream = None
         self._state = Connection._CLOSED
         self._request = None
@@ -201,15 +210,22 @@ class AsyncClient(object):
     def close(self):
         self.connection.close()
 
-    def lazy_call(self, request):
-        return LazySTPResponse()
-
-    def call(self, request, callback):
+    def _prepare_request(self, request):
         if not isinstance(request, STPReqeust):
             if isinstance(request, list) or isinstance(request, tuple):
                 request = STPReqeust(list(request))
             else:
                 request = STPReqeust([request])
+        return request
+
+    def lazy_call(self, request):
+        request = self._prepare_request(request)
+        lresp = LazySTPResponse(self.io_loop)
+        self.connection.send_request(request, lresp)
+        return lresp
+
+    def call(self, request, callback):
+        request = self._prepare_request(request)
         callback = callback
         self.connection.send_request(request, callback)
 

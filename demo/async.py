@@ -31,13 +31,13 @@ def test_lazy_call():
     for resp in async_response:
         try:
             response = resp.response
+            print response.argv
         except Exception as e:
             print str(e)
-        print response.argv
 
 
 def main():
-    test_callback()
+    #test_callback()
     test_lazy_call()
 
 
