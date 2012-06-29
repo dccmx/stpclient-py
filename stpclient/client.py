@@ -200,12 +200,12 @@ class Connection(object):
                 self._send_request()
 
     def _send_request(self):
+        def write_callback():
+            pass
         if self._request.request_timeout:
             self._timeout = self.io_loop.add_timeout(
                 time.time() + self._request.request_timeout,
                 self._on_timeout)
-        def write_callback():
-            pass
         self.start_time = time.time()
         self.stream.write(self._request.serialize(), write_callback)
         self._read_arg()
