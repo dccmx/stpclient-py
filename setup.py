@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-import distutils.core
+from setuptools import setup
 
 
-distutils.core.setup(
+setup(
     name='stpclient',
     version='0.3.0',
     packages=['stpclient'],
