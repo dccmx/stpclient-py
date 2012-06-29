@@ -4,7 +4,7 @@ import distutils.core
 
 distutils.core.setup(
     name='stpclient',
-    version='0.2.0',
+    version='0.3.0',
     packages=['stpclient'],
     package_data={
         'stpclient': ['README.md'],

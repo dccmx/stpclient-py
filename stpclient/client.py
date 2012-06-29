@@ -25,10 +25,17 @@ class STPProtocolError(Exception):
 
 
 class STPReqeust(object):
-    def __init__(self, args, connect_timeout=None, request_timeout=None):
+    def __init__(self, args=None, connect_timeout=None, request_timeout=None):
         self.connect_timeout = connect_timeout
         self.request_timeout = request_timeout
-        self._argv = list(args)
+        if args is None:
+            self._argv = []
+        elif isinstance(args, tuple):
+            self._argv = list(args)
+        elif isinstance(args, list):
+            self._argv = args
+        else:
+            self._argv = [self._encode(args)]
 
     def _encode(self, value):
         "Return a bytestring representation of the value"
@@ -36,8 +43,21 @@ class STPReqeust(object):
             return value.encode('utf-8', 'strict')
         return str(value)
 
-    def add(self, arg):
-        self._argv.append(arg)
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            # Get the start, stop, and step from the slice
+            return [self._argv[ii] for ii in xrange(*key.indices(len(self._argv)))]
+        elif isinstance(key, int):
+            if key < 0:  # Handle negative indices
+                key += len(self._argv)
+            if key >= len(self._argv):
+                raise IndexError('The index (%d) is out of range.' % key)
+            return self._argv[key]  # Get the data from elsewhere
+        else:
+            raise TypeError('Invalid argument type.')
+
+    def __len__(self):
+        return len(self._argv)
 
     def serialize(self):
         buf = ''
@@ -46,6 +66,9 @@ class STPReqeust(object):
             buf += '%d\r\n%s\r\n' % (len(earg), earg)
         buf += '\r\n'
         return buf
+
+    def appendbulk(self, arg):
+        self._argv.append(arg)
 
 
 class STPResponse(object):
@@ -57,6 +80,22 @@ class STPResponse(object):
     @property
     def argv(self):
         return self._argv
+
+    def __len__(self):
+        return len(self._argv)
+
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            #Get the start, stop, and step from the slice
+            return [self._argv[ii] for ii in xrange(*key.indices(len(self._argv)))]
+        elif isinstance(key, int):
+            if key < 0:  # Handle negative indices
+                key += len(self._argv)
+            if key >= len(self._argv):
+                raise IndexError('The index (%d) is out of range.' % key)
+            return self._argv[key]  # Get the data from elsewhere
+        else:
+            raise TypeError('Invalid argument type.')
 
     def rethrow(self):
         """If there was an error on the request, raise an `STPError`."""
@@ -99,6 +138,10 @@ class Connection(object):
         self._request = None
         self._response = STPResponse()
         self._state = Connection._CLOSED
+
+    @property
+    def closed(self):
+        return self._state == Connection._CLOSED
 
     def close(self):
         if self.stream is not None and not self.stream.closed():
@@ -161,8 +204,10 @@ class Connection(object):
             self._timeout = self.io_loop.add_timeout(
                 time.time() + self._request.request_timeout,
                 self._on_timeout)
+        def write_callback():
+            pass
         self.start_time = time.time()
-        self.stream.write(self._request.serialize())
+        self.stream.write(self._request.serialize(), write_callback)
         self._read_arg()
 
     def _run_callback(self, response):
@@ -192,9 +237,9 @@ class Connection(object):
 
     def _on_arg(self, data):
         self._response._argv.append(data)
-        self.stream.read_until(b'\r\n', self._on_strip_arg_endl)
+        self.stream.read_until(b'\r\n', self._on_strip_arg_eol)
 
-    def _on_strip_arg_endl(self, data):
+    def _on_strip_arg_eol(self, data):
         self._read_arg()
 
 
@@ -206,6 +251,10 @@ class AsyncClient(object):
         self.io_loop = io_loop or IOLoop.instance()
         self.max_buffer_size = max_buffer_size
         self.connection = Connection(self.io_loop, self, connect_timeout, self.max_buffer_size)
+
+    @property
+    def closed(self):
+        return self.connection.closed
 
     def close(self):
         self.connection.close()
@@ -226,7 +275,6 @@ class AsyncClient(object):
 
     def call(self, request, callback):
         request = self._prepare_request(request)
-        callback = callback
         self.connection.send_request(request, callback)
 
     def __str__(self):
@@ -242,6 +290,10 @@ class Client(object):
 
     def __del__(self):
         self.close()
+
+    @property
+    def closed(self):
+        return self._async_client.closed
 
     def close(self):
         if not self._closed:

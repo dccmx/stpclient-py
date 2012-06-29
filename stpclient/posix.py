@@ -57,7 +57,7 @@ class Waker(object):
                 result = self.reader.read()
                 if not result:
                     break
-        except IOError:
+        except:
             pass
 
     def close(self):

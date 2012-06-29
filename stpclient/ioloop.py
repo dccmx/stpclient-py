@@ -101,7 +101,7 @@ class IOLoop(object):
     NONE = 0
     READ = _EPOLLIN
     WRITE = _EPOLLOUT
-    ERROR = _EPOLLERR | _EPOLLHUP
+    ERROR = _EPOLLERR | _EPOLLHUP | _EPOLLRDHUP
 
     def __init__(self, impl=None):
         self._impl = impl or _poll()
@@ -323,11 +323,7 @@ class IOLoop(object):
                         # Happens when the client closes the connection
                         pass
                     else:
-                        logging.error("Exception in I/O handler for fd %s",
-                                      fd, exc_info=True)
-                except Exception:
-                    logging.error("Exception in I/O handler for fd %s",
-                                  fd, exc_info=True)
+                        raise
         # reset the stopped flag so another start/stop pair can be issued
         self._stopped = False
         if self._blocking_signal_threshold is not None:
