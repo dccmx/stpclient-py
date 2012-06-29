@@ -44,8 +44,8 @@ try:
 except:
     import _thread as thread
 
-from stpclient import stack_context
-from stpclient.posix import set_close_exec, Waker
+from . import stack_context
+from .posix import set_close_exec, Waker
 
 
 class IOLoop(object):

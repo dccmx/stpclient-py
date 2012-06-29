@@ -27,7 +27,7 @@ import multiprocessing
 
 from binascii import hexlify
 
-from stpclient import ioloop
+from . import ioloop
 
 
 def cpu_count():

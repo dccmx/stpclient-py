@@ -27,8 +27,8 @@ import sys
 import re
 import ssl
 
-from stpclient import ioloop
-from stpclient import stack_context
+from . import ioloop
+from . import stack_context
 
 
 class IOStream(object):

@@ -1,8 +1,8 @@
 #!/usr/bin/python
 # coding: utf-8
 import collections
-from stpclient.ioloop import IOLoop
-from stpclient.iostream import IOStream
+from stpclient.ioloop.ioloop import IOLoop
+from stpclient.ioloop.iostream import IOStream
 import socket
 import time
 

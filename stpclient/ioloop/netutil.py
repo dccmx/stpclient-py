@@ -25,10 +25,10 @@ import socket
 import stat
 import ssl
 
-from stpclient import process
-from stpclient.ioloop import IOLoop
-from stpclient.iostream import IOStream, SSLIOStream
-from stpclient.posix import set_close_exec
+from . import process
+from .ioloop import IOLoop
+from .iostream import IOStream, SSLIOStream
+from .posix import set_close_exec
 
 
 class TCPServer(object):
