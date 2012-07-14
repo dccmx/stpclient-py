@@ -126,7 +126,7 @@ class Connection(object):
     _CONNECTING = 0x002
     _STREAMING = 0x004
 
-    def __init__(self, io_loop, client, timeout=None, connect_timeout=None, max_buffer_size=104857600):
+    def __init__(self, io_loop, client, timeout=-1, connect_timeout=-1, max_buffer_size=104857600):
         self.io_loop = io_loop
         self.client = client
         self.timeout = timeout
@@ -155,8 +155,9 @@ class Connection(object):
         self.stream = IOStream(socket.socket(af, socket.SOCK_STREAM),
                                 io_loop=self.io_loop,
                                 max_buffer_size=self.client.max_buffer_size)
-        if self.connect_timeout is not None:
-            self._timeoutevent = self.io_loop.add_timeout(time.time() + self.connect_timeout, self._on_timeout)
+        if self.connect_timeout is not None and self.connect_timeout > 0:
+            self._timeoutevent = self.io_loop.add_timeout(time.time() + self.connect_timeout,
+                                                            self._on_timeout)
         self.stream.set_close_callback(self._on_close)
         addr = self.client.unix_socket if self.client.unix_socket is not None else (self.client.host, self.client.port)
         self.stream.connect(addr, self._on_connect)
@@ -203,10 +204,11 @@ class Connection(object):
     def _send_request(self):
         def write_callback():
             pass
-        if self._request.request_timeout or self.timeout:
-            self._timeoutevent = self.io_loop.add_timeout(
-                time.time() + (self._request.request_timeout or self.timeout),
-                self._on_timeout)
+        timeout = self.timeout
+        if self._request.request_timeout is not None:
+            timeout = self._request.request_timeout
+        if timeout is not None and timeout > 0:
+            self._timeoutevent = self.io_loop.add_timeout(time.time() + timeout, self._on_timeout)
         self.start_time = time.time()
         self.stream.write(self._request.serialize(), write_callback)
         self._read_arg()
@@ -225,6 +227,8 @@ class Connection(object):
             response = self._response
             self._response = STPResponse()
             response.request_time = time.time() - self.start_time
+            if self._timeoutevent is not None:
+                self.io_loop.remove_timeout(self._timeoutevent)
             self._run_callback(response)
             self._request = None
             self._connect_and_send_request()
@@ -245,7 +249,7 @@ class Connection(object):
 
 
 class AsyncClient(object):
-    def __init__(self, host, port, unix_socket=None, io_loop=None, timeout=None, connect_timeout=None, max_buffer_size=104857600):
+    def __init__(self, host, port, unix_socket=None, io_loop=None, timeout=-1, connect_timeout=-1, max_buffer_size=104857600):
         self.host = host
         self.port = port
         self.unix_socket = unix_socket
@@ -283,7 +287,7 @@ class AsyncClient(object):
 
 
 class Client(object):
-    def __init__(self, host, port, timeout=None, connect_timeout=None, unix_socket=None, max_buffer_size=104857600):
+    def __init__(self, host, port, timeout=None, connect_timeout=-1, unix_socket=-1, max_buffer_size=104857600):
         self._io_loop = IOLoop()
         self._async_client = AsyncClient(host, port, unix_socket, self._io_loop, timeout, connect_timeout, max_buffer_size)
         self._response = None
