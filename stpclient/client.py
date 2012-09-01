@@ -287,7 +287,7 @@ class AsyncClient(object):
 
 
 class Client(object):
-    def __init__(self, host, port, timeout=None, connect_timeout=-1, unix_socket=-1, max_buffer_size=104857600):
+    def __init__(self, host, port, timeout=None, connect_timeout=-1, unix_socket=None, max_buffer_size=104857600):
         self._io_loop = IOLoop()
         self._async_client = AsyncClient(host, port, unix_socket, self._io_loop, timeout, connect_timeout, max_buffer_size)
         self._response = None
