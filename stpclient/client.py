@@ -1,27 +1,18 @@
 #!/usr/bin/python
 # coding: utf-8
 import collections
-from stpclient.ioloop.ioloop import IOLoop
-from stpclient.ioloop.iostream import IOStream
+from tornado.ioloop import IOLoop
+from tornado.iostream import IOStream
 import socket
 import time
+import exceptions
 
 
-# exceptions for Client
-class STPError(Exception):
-    pass
-
-
-class STPTimeoutError(Exception):
-    pass
-
-
-class STPNetworkError(Exception):
-    pass
-
-
-class STPProtocolError(Exception):
-    pass
+def encode(value):
+    "Return a bytestring representation of the value"
+    if isinstance(value, unicode):
+        return value.encode('utf-8', 'strict')
+    return str(value)
 
 
 class STPReqeust(object):
@@ -35,13 +26,7 @@ class STPReqeust(object):
         elif isinstance(args, list):
             self._argv = args
         else:
-            self._argv = [self._encode(args)]
-
-    def _encode(self, value):
-        "Return a bytestring representation of the value"
-        if isinstance(value, unicode):
-            return value.encode('utf-8', 'strict')
-        return str(value)
+            self._argv = [encode(args)]
 
     def __getitem__(self, key):
         if isinstance(key, slice):
@@ -62,7 +47,7 @@ class STPReqeust(object):
     def serialize(self):
         buf = ''
         for arg in self._argv:
-            earg = self._encode(arg)
+            earg = encode(arg)
             buf += '%d\r\n%s\r\n' % (len(earg), earg)
         buf += '\r\n'
         return buf
@@ -126,6 +111,9 @@ class Connection(object):
     _CONNECTING = 0x002
     _STREAMING = 0x004
 
+    '''
+    timeout -1: no timeout, None: per-request setting, other: overide per-request setting
+    '''
     def __init__(self, io_loop, client, timeout=-1, connect_timeout=-1, max_buffer_size=104857600):
         self.io_loop = io_loop
         self.client = client
@@ -172,7 +160,7 @@ class Connection(object):
     def _on_timeout(self):
         self._timeoutevent = None
         self._run_callback(STPResponse(request_time=time.time() - self.start_time,
-                                        error=STPTimeoutError('Timeout')))
+                error=exceptions.STPTimeoutError('Timeout')))
         if self.stream is not None:
             self.stream.close()
         self.stream = None
@@ -183,7 +171,7 @@ class Connection(object):
 
     def _on_close(self):
         self._run_callback(STPResponse(request_time=time.time() - self.start_time,
-                                        error=STPNetworkError('Connection error')))
+                error=exceptions.STPNetworkError('Connection error')))
         self._state = Connection._CLOSED
         self._request = None
         if len(self._request_queue) > 0:
@@ -203,6 +191,7 @@ class Connection(object):
 
     def _send_request(self):
         def write_callback():
+            '''tornado needs it'''
             pass
         timeout = self.timeout
         if self._request.request_timeout is not None:
@@ -238,7 +227,7 @@ class Connection(object):
                 self.stream.read_bytes(arglen, self._on_arg)
             except Exception as e:
                 self._run_callback(STPResponse(request_time=time.time() - self.start_time,
-                                                error=STPProtocolError(str(e))))
+                        error=exceptions.STPProtocolError(str(e))))
 
     def _on_arg(self, data):
         self._response._argv.append(data)
@@ -249,7 +238,7 @@ class Connection(object):
 
 
 class AsyncClient(object):
-    def __init__(self, host, port, unix_socket=None, io_loop=None, timeout=-1, connect_timeout=-1, max_buffer_size=104857600):
+    def __init__(self, host, port, timeout=-1, connect_timeout=-1, unix_socket=None, io_loop=None, max_buffer_size=104857600):
         self.host = host
         self.port = port
         self.unix_socket = unix_socket

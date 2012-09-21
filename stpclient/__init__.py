@@ -2,7 +2,9 @@ from stpclient.client import (
         AsyncClient,
         Client,
         STPReqeust,
-        STPResponse,
+        STPResponse)
+
+from stpclient.exceptions import (
         STPError,
         STPTimeoutError,
         STPNetworkError)
@@ -10,8 +12,6 @@ from stpclient.client import (
 from stpclient.magicclient import MagicClient
 
 
-__author__ = "dccmx <dccmx@dccmx.com>"
-__license__ = "MIT"
 __all__ = [
         'AsyncClient',
         'Client',

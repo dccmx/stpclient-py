@@ -4,11 +4,12 @@ from setuptools import setup
 
 setup(
     name='stpclient',
-    version='0.3.6',
-    packages=['stpclient', 'stpclient.ioloop'],
+    version='0.4.0',
+    packages=['stpclient'],
     package_data={
         'stpclient': ['README.md'],
         },
+    install_requires=['tornado'],
     author='dccmx',
     author_email='dccmx@dccmx.com',
     url='http://simpletp.org',
