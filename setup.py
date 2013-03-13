@@ -4,11 +4,11 @@ from setuptools import setup
 
 setup(
     name='stpclient',
-    version='0.4.0',
+    version='0.4.2',
     packages=['stpclient'],
     package_data={
         'stpclient': ['README.md'],
-        },
+    },
     install_requires=['tornado'],
     author='dccmx',
     author_email='dccmx@dccmx.com',

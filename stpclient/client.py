@@ -1,10 +1,10 @@
 #!/usr/bin/python
 # coding: utf-8
+import socket
+import time
 import collections
 from tornado.ioloop import IOLoop
 from tornado.iostream import IOStream
-import socket
-import time
 import exceptions
 
 
@@ -77,10 +77,10 @@ class STPResponse(object):
             if key < 0:  # Handle negative indices
                 key += len(self._argv)
             if key >= len(self._argv):
-                raise IndexError('The index (%d) is out of range.' % key)
+                raise IndexError('The index (%d) is out of range' % key)
             return self._argv[key]  # Get the data from elsewhere
         else:
-            raise TypeError('Invalid argument type.')
+            raise TypeError('Invalid argument type')
 
     def rethrow(self):
         """If there was an error on the request, raise an `STPError`."""
@@ -141,11 +141,10 @@ class Connection(object):
         self._state = Connection._CONNECTING
         af = socket.AF_INET if self.client.unix_socket is None else socket.AF_UNIX
         self.stream = IOStream(socket.socket(af, socket.SOCK_STREAM),
-                                io_loop=self.io_loop,
-                                max_buffer_size=self.client.max_buffer_size)
+                               io_loop=self.io_loop,
+                               max_buffer_size=self.client.max_buffer_size)
         if self.connect_timeout is not None and self.connect_timeout > 0:
-            self._timeoutevent = self.io_loop.add_timeout(time.time() + self.connect_timeout,
-                                                            self._on_timeout)
+            self._timeoutevent = self.io_loop.add_timeout(time.time() + self.connect_timeout, self._on_timeout)
         self.stream.set_close_callback(self._on_close)
         addr = self.client.unix_socket if self.client.unix_socket is not None else (self.client.host, self.client.port)
         self.stream.connect(addr, self._on_connect)
@@ -159,8 +158,9 @@ class Connection(object):
 
     def _on_timeout(self):
         self._timeoutevent = None
+        msg = 'Connect timeout' if self._state == Connection._CONNECTING else 'Request timeout'
         self._run_callback(STPResponse(request_time=time.time() - self.start_time,
-                error=exceptions.STPTimeoutError('Timeout')))
+                           error=exceptions.STPTimeoutError(msg)))
         if self.stream is not None:
             self.stream.close()
         self.stream = None
@@ -171,7 +171,7 @@ class Connection(object):
 
     def _on_close(self):
         self._run_callback(STPResponse(request_time=time.time() - self.start_time,
-                error=exceptions.STPNetworkError('Connection error')))
+                           error=exceptions.STPNetworkError('Socket closed by remote end')))
         self._state = Connection._CLOSED
         self._request = None
         if len(self._request_queue) > 0:
@@ -212,7 +212,7 @@ class Connection(object):
         self.stream.read_until(b'\r\n', self._on_arglen)
 
     def _on_arglen(self, data):
-        if data == '\r\n':
+        if data == b'\r\n':
             response = self._response
             self._response = STPResponse()
             response.request_time = time.time() - self.start_time
@@ -227,7 +227,7 @@ class Connection(object):
                 self.stream.read_bytes(arglen, self._on_arg)
             except Exception as e:
                 self._run_callback(STPResponse(request_time=time.time() - self.start_time,
-                        error=exceptions.STPProtocolError(str(e))))
+                                   error=exceptions.STPProtocolError(str(e))))
 
     def _on_arg(self, data):
         self._response._argv.append(data)
@@ -278,7 +278,7 @@ class AsyncClient(object):
 class Client(object):
     def __init__(self, host, port, timeout=None, connect_timeout=-1, unix_socket=None, max_buffer_size=104857600):
         self._io_loop = IOLoop()
-        self._async_client = AsyncClient(host, port, unix_socket, self._io_loop, timeout, connect_timeout, max_buffer_size)
+        self._async_client = AsyncClient(host, port, timeout, connect_timeout, unix_socket, self._io_loop, max_buffer_size)
         self._response = None
         self._closed = False
 
