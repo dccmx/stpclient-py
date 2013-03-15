@@ -1,7 +1,7 @@
 from stpclient.client import (
         AsyncClient,
         Client,
-        STPReqeust,
+        STPRequest,
         STPResponse)
 
 from stpclient.exceptions import (
@@ -15,7 +15,7 @@ from stpclient.magicclient import MagicClient
 __all__ = [
         'AsyncClient',
         'Client',
-        'STPReqeust', 'STPResponse',
+        'STPRequest', 'STPResponse',
         'STPError', 'STPTimeoutError', 'STPNetworkError',
         'MagicClient'
         ]

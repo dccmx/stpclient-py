@@ -15,7 +15,7 @@ def encode(value):
     return str(value)
 
 
-class STPReqeust(object):
+class STPRequest(object):
     def __init__(self, args=None, connect_timeout=None, request_timeout=None):
         self.connect_timeout = connect_timeout
         self.request_timeout = request_timeout
@@ -254,11 +254,11 @@ class AsyncClient(object):
         self.connection.close()
 
     def _prepare_request(self, request):
-        if not isinstance(request, STPReqeust):
+        if not isinstance(request, STPRequest):
             if isinstance(request, list) or isinstance(request, tuple):
-                request = STPReqeust(list(request))
+                request = STPRequest(list(request))
             else:
-                request = STPReqeust([request])
+                request = STPRequest([request])
         return request
 
     def lazy_call(self, request):
