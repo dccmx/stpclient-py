@@ -71,8 +71,8 @@ class STPResponse(object):
 
     def __getitem__(self, key):
         if isinstance(key, slice):
-            #Get the start, stop, and step from the slice
-            return [self._argv[ii] for ii in xrange(*key.indices(len(self._argv)))]
+            # Get the start, stop, and step from the slice
+            return [self._argv[i] for i in xrange(*key.indices(len(self._argv)))]
         elif isinstance(key, int):
             if key < 0:  # Handle negative indices
                 key += len(self._argv)
@@ -83,7 +83,7 @@ class STPResponse(object):
             raise TypeError('Invalid argument type')
 
     def rethrow(self):
-        """If there was an error on the request, raise an `STPError`."""
+        '''If there was an error on the request, raise an `STPError`.'''
         if self.error:
             raise self.error
 
@@ -112,13 +112,19 @@ class Connection(object):
     _STREAMING = 0x004
 
     '''
-    timeout -1: no timeout, None: per-request setting, other: overide per-request setting
+    timeout
+      -1: no timeout
+      None: per-request setting
+      other: overide per-request setting
     '''
-    def __init__(self, io_loop, client, timeout=-1, connect_timeout=-1, max_buffer_size=104857600):
+    def __init__(self, host, port, io_loop, unix_socket=None, timeout=-1, connect_timeout=-1, max_buffer_size=104857600):
+        self.host = host
+        self.port = port
+        self.unix_socket = unix_socket
         self.io_loop = io_loop
-        self.client = client
-        self.timeout = timeout
         self.connect_timeout = connect_timeout
+        self.timeout = timeout
+        self.max_buffer_size = max_buffer_size
         self.start_time = time.time()
         self.stream = None
         self._timeoutevent = None
@@ -139,14 +145,14 @@ class Connection(object):
 
     def _connect(self):
         self._state = Connection._CONNECTING
-        af = socket.AF_INET if self.client.unix_socket is None else socket.AF_UNIX
+        af = socket.AF_INET if self.unix_socket is None else socket.AF_UNIX
         self.stream = IOStream(socket.socket(af, socket.SOCK_STREAM),
                                io_loop=self.io_loop,
-                               max_buffer_size=self.client.max_buffer_size)
+                               max_buffer_size=self.max_buffer_size)
         if self.connect_timeout is not None and self.connect_timeout > 0:
             self._timeoutevent = self.io_loop.add_timeout(time.time() + self.connect_timeout, self._on_timeout)
         self.stream.set_close_callback(self._on_close)
-        addr = self.client.unix_socket if self.client.unix_socket is not None else (self.client.host, self.client.port)
+        addr = self.unix_socket if self.unix_socket is not None else (self.host, self.port)
         self.stream.connect(addr, self._on_connect)
 
     def _on_connect(self):
@@ -159,6 +165,7 @@ class Connection(object):
     def _on_timeout(self):
         self._timeoutevent = None
         msg = 'Connect timeout' if self._state == Connection._CONNECTING else 'Request timeout'
+        msg += ' to %s' % str(self)
         self._run_callback(STPResponse(request_time=time.time() - self.start_time,
                            error=exceptions.STPTimeoutError(msg)))
         if self.stream is not None:
@@ -170,8 +177,9 @@ class Connection(object):
             self._connect_and_send_request()
 
     def _on_close(self):
+        msg = str(self.stream.error) if self.stream.error is not None else 'Connection closed by remote end'
         self._run_callback(STPResponse(request_time=time.time() - self.start_time,
-                           error=exceptions.STPNetworkError('Socket closed by remote end')))
+                           error=exceptions.STPNetworkError('%s %s' % (msg, str(self)))))
         self._state = Connection._CLOSED
         self._request = None
         if len(self._request_queue) > 0:
@@ -193,6 +201,8 @@ class Connection(object):
         def write_callback():
             '''tornado needs it'''
             pass
+        if self._request is None:
+            return
         timeout = self.timeout
         if self._request.request_timeout is not None:
             timeout = self._request.request_timeout
@@ -236,6 +246,18 @@ class Connection(object):
     def _on_strip_arg_eol(self, data):
         self._read_arg()
 
+    def __str__(self):
+        return '%s:%d' % (self.host, self.port) if self.unix_socket is None else self.unix_socket
+
+
+def prepare_request(request):
+    if not isinstance(request, STPRequest):
+        if isinstance(request, list) or isinstance(request, tuple):
+            request = STPRequest(list(request))
+        else:
+            request = STPRequest([request])
+    return request
+
 
 class AsyncClient(object):
     def __init__(self, host, port, timeout=-1, connect_timeout=-1, unix_socket=None, io_loop=None, max_buffer_size=104857600):
@@ -244,7 +266,7 @@ class AsyncClient(object):
         self.unix_socket = unix_socket
         self.io_loop = io_loop or IOLoop.instance()
         self.max_buffer_size = max_buffer_size
-        self.connection = Connection(self.io_loop, self, timeout, connect_timeout, self.max_buffer_size)
+        self.connection = Connection(self.host, self.port, self.io_loop, self.unix_socket, timeout, connect_timeout, self.max_buffer_size)
 
     @property
     def closed(self):
@@ -253,26 +275,18 @@ class AsyncClient(object):
     def close(self):
         self.connection.close()
 
-    def _prepare_request(self, request):
-        if not isinstance(request, STPRequest):
-            if isinstance(request, list) or isinstance(request, tuple):
-                request = STPRequest(list(request))
-            else:
-                request = STPRequest([request])
-        return request
-
     def lazy_call(self, request):
-        request = self._prepare_request(request)
+        request = prepare_request(request)
         lresp = LazySTPResponse(self.io_loop)
         self.connection.send_request(request, lresp)
         return lresp
 
     def call(self, request, callback):
-        request = self._prepare_request(request)
+        request = prepare_request(request)
         self.connection.send_request(request, callback)
 
     def __str__(self):
-        return '%s:%d' % (self.host, self.port) if self.unix_socket is None else self.unix_socket
+        return 'Async STPClient to %s' % str(self.connection)
 
 
 class Client(object):
@@ -307,4 +321,4 @@ class Client(object):
         return response
 
     def __str__(self):
-        return str(self._async_client)
+        return 'STPClient to %s' % str(self._async_client.connection)
