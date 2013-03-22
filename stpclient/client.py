@@ -166,22 +166,24 @@ class Connection(object):
         self._timeoutevent = None
         msg = 'Connect timeout' if self._state == Connection._CONNECTING else 'Request timeout'
         msg += ' to %s' % str(self)
-        self._run_callback(STPResponse(request_time=time.time() - self.start_time,
-                           error=exceptions.STPTimeoutError(msg)))
         if self.stream is not None:
             self.stream.close()
         self.stream = None
         self._state = Connection._CLOSED
         self._request = None
+        self._run_callback(STPResponse(request_time=time.time() - self.start_time,
+                           error=exceptions.STPTimeoutError(msg)))
+        # reconnect and send remaining requests
         if len(self._request_queue) > 0:
             self._connect_and_send_request()
 
     def _on_close(self):
+        self._state = Connection._CLOSED
+        self._request = None
         msg = str(self.stream.error) if self.stream.error is not None else 'Connection closed by remote end'
         self._run_callback(STPResponse(request_time=time.time() - self.start_time,
                            error=exceptions.STPNetworkError('%s %s' % (msg, str(self)))))
-        self._state = Connection._CLOSED
-        self._request = None
+        # reconnect and send remaining requests
         if len(self._request_queue) > 0:
             self._connect_and_send_request()
 
