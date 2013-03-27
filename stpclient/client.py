@@ -2,7 +2,6 @@
 # coding: utf-8
 import socket
 import time
-import sys
 import collections
 from tornado.ioloop import IOLoop
 from tornado.iostream import IOStream
@@ -108,9 +107,6 @@ class LazySTPResponse(object):
 
 class Connection(object):
     # Constants for connection state
-    _CLOSED = 0x001
-    _CONNECTING = 0x002
-    _STREAMING = 0x004
 
     '''
     timeout
@@ -133,16 +129,15 @@ class Connection(object):
         self._request_queue = collections.deque()
         self._request = None
         self._response = STPResponse()
-        self._state = Connection._CLOSED
+        self._connecting = False
 
     @property
     def closed(self):
         return self._state == Connection._CLOSED
 
     def close(self):
-        if self.stream is not None and not self.stream.closed():
-            self._close_stream()
-        self.stream = None
+        self._close_stream()
+        self._clear_timeout()
 
     def _close_stream(self):
         if self.stream is not None:
@@ -154,53 +149,33 @@ class Connection(object):
             self._timeoutevent = None
 
     def _connect(self):
-        self._state = Connection._CONNECTING
+        self.close()
+        self._connecting = True
         af = socket.AF_INET if self.unix_socket is None else socket.AF_UNIX
-        if self.stream is not None:
-            # close last stream
-            self.stream.set_close_callback(None)
-            self._clear_timeout()
-
-        # fix tornado stream bug, see tornado.iostream.close()
-        sys.exc_clear()
-
         self.stream = IOStream(socket.socket(af, socket.SOCK_STREAM),
                                io_loop=self.io_loop,
                                max_buffer_size=self.max_buffer_size)
         if self.connect_timeout is not None and self.connect_timeout > 0:
             self._timeoutevent = self.io_loop.add_timeout(time.time() + self.connect_timeout, self._on_timeout)
-        self.stream.set_close_callback(self._on_close)
         addr = self.unix_socket if self.unix_socket is not None else (self.host, self.port)
         self.stream.connect(addr, self._on_connect)
 
     def _on_connect(self):
+        self._connecting = False
         self._clear_timeout()
-        self._state = Connection._STREAMING
         self._send_request()
 
     def _on_timeout(self):
-        self._timeoutevent = None
-        msg = 'Connect timeout' if self._state == Connection._CONNECTING else 'Request timeout'
+        msg = 'Connect timeout' if self._connecting else 'Request timeout'
         msg += ' to %s' % str(self)
-        if self.stream is not None:
-            self._close_stream()
-        self.stream = None
-        self._state = Connection._CLOSED
-        self._request = None
-        self._run_callback(STPResponse(request_time=time.time() - self.start_time,
-                           error=exceptions.STPTimeoutError(msg)))
-        # reconnect and send remaining requests
-        if len(self._request_queue) > 0:
-            self._connect_and_send_request()
+        self._on_error(exceptions.STPTimeoutError(msg))
 
-    def _on_close(self):
-        self._state = Connection._CLOSED
+    def _on_error(self, e=None):
+        msg = str(self.stream.error) if self.stream.error is not None else str(e)
+        self.close()
         self._request = None
-        msg = str(self.stream.error) if self.stream.error is not None else 'Connection closed by remote end'
-        self.stream.error = None
         self._run_callback(STPResponse(request_time=time.time() - self.start_time,
                            error=exceptions.STPNetworkError('%s %s' % (msg, str(self)))))
-        self._clear_timeout()
         # reconnect and send remaining requests
         if len(self._request_queue) > 0:
             self._connect_and_send_request()
@@ -232,8 +207,8 @@ class Connection(object):
         try:
             self.stream.write(self._request.serialize(), write_callback)
             self._read_arg()
-        except:
-            self._close_stream()
+        except Exception as e:
+            self._on_error(e)
 
     def _run_callback(self, response):
         if self._callback is not None:
@@ -242,7 +217,10 @@ class Connection(object):
             callback(response)
 
     def _read_arg(self):
-        self.stream.read_until(b'\r\n', self._on_arglen)
+        try:
+            self.stream.read_until(b'\r\n', self._on_arglen)
+        except Exception as e:
+            self._on_error(e)
 
     def _on_arglen(self, data):
         if data == b'\r\n':
@@ -258,12 +236,14 @@ class Connection(object):
                 arglen = int(data[:-2])
                 self.stream.read_bytes(arglen, self._on_arg)
             except Exception as e:
-                self._run_callback(STPResponse(request_time=time.time() - self.start_time,
-                                   error=exceptions.STPProtocolError(str(e))))
+                self._on_error(exceptions.STPProtocolError(str(e)))
 
     def _on_arg(self, data):
         self._response._argv.append(data)
-        self.stream.read_until(b'\r\n', self._on_strip_arg_eol)
+        try:
+            self.stream.read_until(b'\r\n', self._on_strip_arg_eol)
+        except Exception as e:
+            self._on_error(e)
 
     def _on_strip_arg_eol(self, data):
         self._read_arg()
