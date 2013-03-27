@@ -119,11 +119,11 @@ class Connection(object):
         self.unix_socket = unix_socket
         self.io_loop = io_loop
         self.connect_timeout = connect_timeout
-        self.timeout = timeout
+        self.request_timeout = timeout
         self.max_buffer_size = max_buffer_size
         self.start_time = time.time()
         self.stream = None
-        self._timeoutevent = None
+        self._timeout = None
         self._callback = None
         self._request_queue = collections.deque()
         self._request = None
@@ -146,9 +146,9 @@ class Connection(object):
         self.stream = None
 
     def _clear_timeout(self):
-        if self._timeoutevent is not None:
-            self.io_loop.remove_timeout(self._timeoutevent)
-        self._timeoutevent = None
+        if self._timeout is not None:
+            self.io_loop.remove_timeout(self._timeout)
+        self._timeout = None
 
     def _connect(self):
         # fix tornado stream bug, see tornado.iostream.close()
@@ -160,7 +160,7 @@ class Connection(object):
                                io_loop=self.io_loop,
                                max_buffer_size=self.max_buffer_size)
         if self.connect_timeout is not None and self.connect_timeout > 0:
-            self._timeoutevent = self.io_loop.add_timeout(time.time() + self.connect_timeout, self._on_timeout)
+            self._timeout = self.io_loop.add_timeout(time.time() + self.connect_timeout, self._on_timeout)
         self.stream.set_close_callback(self._on_close)
         addr = self.unix_socket if self.unix_socket is not None else (self.host, self.port)
         self.stream.connect(addr, self._on_connect)
@@ -208,11 +208,11 @@ class Connection(object):
             pass
         if self._request is None:
             return
-        timeout = self.timeout
+        timeout = self.request_timeout
         if self._request.request_timeout is not None:
             timeout = self._request.request_timeout
         if timeout is not None and timeout > 0:
-            self._timeoutevent = self.io_loop.add_timeout(time.time() + timeout, self._on_timeout)
+            self._timeout = self.io_loop.add_timeout(time.time() + timeout, self._on_timeout)
         self.start_time = time.time()
         try:
             self.stream.write(self._request.serialize(), write_callback)
@@ -303,25 +303,29 @@ class AsyncClient(object):
 
 class Client(object):
     def __init__(self, host, port, timeout=None, connect_timeout=-1, unix_socket=None, max_buffer_size=104857600):
-        self._io_loop = IOLoop()
-        self._async_client = AsyncClient(host, port, timeout, connect_timeout, unix_socket, self._io_loop, max_buffer_size)
-        self._response = None
-        self._closed = False
-
-    def __del__(self):
-        self.close()
+        def connect():
+            self._io_loop = IOLoop()
+            self._async_client = AsyncClient(host, port, timeout, connect_timeout, unix_socket, self._io_loop, max_buffer_size)
+            self._response = None
+        self._connect = connect
+        self._connect()
 
     @property
     def closed(self):
-        return self._async_client.closed
+        return self._async_client is None
 
     def close(self):
-        if not self._closed:
+        if self._async_client:
             self._async_client.close()
+        if self._io_loop.running():
             self._io_loop.close()
-            self._closed = True
+        self._async_client = None
+        self._io_loop = None
 
     def call(self, request):
+        if self.closed:
+            self._connect()
+
         def callback(response):
             self._response = response
             self._io_loop.stop()
@@ -331,6 +335,9 @@ class Client(object):
         self._response = None
         response.rethrow()
         return response
+
+    def __del__(self):
+        self.close()
 
     def __str__(self):
         return 'STPClient to %s' % str(self._async_client.connection)

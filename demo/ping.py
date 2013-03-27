@@ -18,6 +18,7 @@ def main():
         try:
             print client.call('ping').argv
         except:
+            client.close()
             logging.exception('')
         time.sleep(0.5)
 
