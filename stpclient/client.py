@@ -1,5 +1,6 @@
 #!/usr/bin/python
 # coding: utf-8
+import sys
 import socket
 import time
 import collections
@@ -31,7 +32,7 @@ class STPRequest(object):
     def __getitem__(self, key):
         if isinstance(key, slice):
             # Get the start, stop, and step from the slice
-            return [self._argv[ii] for ii in xrange(*key.indices(len(self._argv)))]
+            return [self._argv[i] for i in xrange(*key.indices(len(self._argv)))]
         elif isinstance(key, int):
             if key < 0:  # Handle negative indices
                 key += len(self._argv)
@@ -106,8 +107,6 @@ class LazySTPResponse(object):
 
 
 class Connection(object):
-    # Constants for connection state
-
     '''
     timeout
       -1: no timeout
@@ -133,7 +132,7 @@ class Connection(object):
 
     @property
     def closed(self):
-        return self._state == Connection._CLOSED
+        return self.stream is None
 
     def close(self):
         self._close_stream()
@@ -141,14 +140,19 @@ class Connection(object):
 
     def _close_stream(self):
         if self.stream is not None:
-            self.stream.close()
+            self.stream.error = None
+            if not self.stream.closed():
+                self.stream.close()
+        self.stream = None
 
     def _clear_timeout(self):
         if self._timeoutevent is not None:
             self.io_loop.remove_timeout(self._timeoutevent)
-            self._timeoutevent = None
+        self._timeoutevent = None
 
     def _connect(self):
+        # fix tornado stream bug, see tornado.iostream.close()
+        sys.exc_clear()
         self.close()
         self._connecting = True
         af = socket.AF_INET if self.unix_socket is None else socket.AF_UNIX
@@ -157,13 +161,19 @@ class Connection(object):
                                max_buffer_size=self.max_buffer_size)
         if self.connect_timeout is not None and self.connect_timeout > 0:
             self._timeoutevent = self.io_loop.add_timeout(time.time() + self.connect_timeout, self._on_timeout)
+        self.stream.set_close_callback(self._on_close)
         addr = self.unix_socket if self.unix_socket is not None else (self.host, self.port)
         self.stream.connect(addr, self._on_connect)
+
+    def _on_close(self):
+        if not self.stream.error:
+            self.stream.error = exceptions.STPNetworkError('Socket closed by remote end')
+        self.io_loop.add_callback(self._on_error)
 
     def _on_connect(self):
         self._connecting = False
         self._clear_timeout()
-        self._send_request()
+        self._write_request()
 
     def _on_timeout(self):
         msg = 'Connect timeout' if self._connecting else 'Request timeout'
@@ -178,21 +188,21 @@ class Connection(object):
                            error=exceptions.STPNetworkError('%s %s' % (msg, str(self)))))
         # reconnect and send remaining requests
         if len(self._request_queue) > 0:
-            self._connect_and_send_request()
+            self._connect_and_write_request()
 
     def send_request(self, request, callback):
         self._request_queue.append((request, callback))
-        self._connect_and_send_request()
+        self._connect_and_write_request()
 
-    def _connect_and_send_request(self):
+    def _connect_and_write_request(self):
         if len(self._request_queue) > 0 and self._request is None:
             self._request, self._callback = self._request_queue.popleft()
-            if self.stream is None or self._state == Connection._CLOSED:
+            if self.closed:
                 self._connect()
-            elif self._state == Connection._STREAMING:
-                self._send_request()
+            elif not self._connecting:
+                self._write_request()
 
-    def _send_request(self):
+    def _write_request(self):
         def write_callback():
             '''tornado needs it'''
             pass
@@ -230,7 +240,7 @@ class Connection(object):
             self._clear_timeout()
             self._run_callback(response)
             self._request = None
-            self._connect_and_send_request()
+            self._connect_and_write_request()
         else:
             try:
                 arglen = int(data[:-2])
