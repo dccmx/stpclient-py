@@ -181,7 +181,7 @@ class Connection(object):
         self._on_error(exceptions.STPTimeoutError(msg))
 
     def _on_error(self, e=None):
-        msg = str(self.stream.error) if self.stream.error is not None else str(e)
+        msg = str(self.stream.error) if self.stream is not None and self.stream.error is not None else str(e)
         self.close()
         self._request = None
         self._run_callback(STPResponse(request_time=time.time() - self.start_time,
