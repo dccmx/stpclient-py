@@ -166,7 +166,7 @@ class Connection(object):
         self.stream.connect(addr, self._on_connect)
 
     def _on_close(self):
-        if not self.stream.error:
+        if not self.stream and not self.stream.error:
             self.stream.error = exceptions.STPNetworkError('Socket closed by remote end')
         self.io_loop.add_callback(self._on_error)
 
