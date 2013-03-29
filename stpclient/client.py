@@ -177,7 +177,6 @@ class Connection(object):
 
     def _on_timeout(self):
         msg = 'Connect timeout' if self._connecting else 'Request timeout'
-        msg += ' to %s' % str(self)
         self._on_error(exceptions.STPTimeoutError(msg))
 
     def _on_error(self, e=None):
