@@ -316,8 +316,7 @@ class Client(object):
     def close(self):
         if self._async_client:
             self._async_client.close()
-        if self._io_loop.running():
-            self._io_loop.close()
+        self._io_loop.close()
         self._async_client = None
         self._io_loop = None
 

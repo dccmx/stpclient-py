@@ -4,7 +4,7 @@ from setuptools import setup
 
 setup(
     name='stpclient',
-    version='0.5.5',
+    version='0.5.6',
     packages=['stpclient'],
     package_data={
         'stpclient': ['README.md'],
