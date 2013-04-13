@@ -135,6 +135,7 @@ class Connection(object):
         return self.stream is None
 
     def close(self):
+        self._clear_close_callback()
         self._close_stream()
         self._clear_timeout()
 
@@ -151,7 +152,8 @@ class Connection(object):
         self._timeout = None
 
     def _clear_close_callback(self):
-        self.stream.set_close_callback(None)
+        if self.stream:
+            self.stream.set_close_callback(None)
 
     def _connect(self):
         # fix tornado stream bug, see tornado.iostream.close()
@@ -170,8 +172,9 @@ class Connection(object):
 
     def _on_close(self):
         if self.stream and not self.stream.error:
-            self.stream.error = exceptions.STPNetworkError('Socket seems to be closed by remote end')
-        self.io_loop.add_callback(self._on_error)
+            self.io_loop.add_callback(self._on_error, exceptions.STPNetworkError('Unkown socket error (this should not happen!)'))
+        else:
+            self.io_loop.add_callback(self._on_error)
 
     def _on_connect(self):
         self._connecting = False
@@ -180,7 +183,6 @@ class Connection(object):
 
     def _on_timeout(self):
         self._clear_timeout()
-        self._clear_close_callback()
         msg = 'Connect timeout' if self._connecting else 'Request timeout'
         msg += ' %s' % str(self)
         self._on_error(exceptions.STPTimeoutError(msg))
@@ -234,9 +236,15 @@ class Connection(object):
             self._callback = None
             callback(response)
 
+    def _read_until(self, delimiter, callback):
+        self.stream.read_until(delimiter, callback)
+
+    def _read_bytes(self, size, callback):
+        self.stream.read_bytes(size, callback)
+
     def _read_arg(self):
         try:
-            self.stream.read_until(b'\r\n', self._on_arglen)
+            self.io_loop.add_callback(self._read_until, b'\r\n', self._on_arglen)
         except Exception as e:
             self._on_error(e)
 
@@ -252,14 +260,14 @@ class Connection(object):
         else:
             try:
                 arglen = int(data[:-2])
-                self.stream.read_bytes(arglen, self._on_arg)
+                self.io_loop.add_callback(self._read_bytes, arglen, self._on_arg)
             except Exception as e:
                 self._on_error(exceptions.STPProtocolError(str(e)))
 
     def _on_arg(self, data):
         self._response._argv.append(data)
         try:
-            self.stream.read_until(b'\r\n', self._on_strip_arg_eol)
+            self.io_loop.add_callback(self._read_until, b'\r\n', self._on_strip_arg_eol)
         except Exception as e:
             self._on_error(e)
 
