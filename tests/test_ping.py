@@ -12,14 +12,14 @@ class TestPing(unittest.TestCase):
         client.close()
         assert client.closed
 
-    def test_connect(self):
+    def test_error_state(self):
         from stpclient import Client
         from stpclient.exceptions import STPNetworkError
         client = Client('localhost', 0)
         assert not client.closed
         try:
             client.call('ping')
-        except STPNetworkError as e:
+        except STPNetworkError:
             pass
         assert client.closed
 
