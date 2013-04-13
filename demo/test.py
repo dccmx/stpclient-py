@@ -42,6 +42,10 @@ def test_sync():
         print e
         time.sleep(1)
     print client.call('ping').argv
+    print 'sleep 10s'
+    time.sleep(10)
+    print 'ping again'
+    print client.call('ping').argv
 
 
 def main():
