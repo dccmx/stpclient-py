@@ -150,6 +150,9 @@ class Connection(object):
             self.io_loop.remove_timeout(self._timeout)
         self._timeout = None
 
+    def _clear_close_callback(self):
+        self.stream.set_close_callback(None)
+
     def _connect(self):
         # fix tornado stream bug, see tornado.iostream.close()
         sys.exc_clear()
@@ -177,6 +180,7 @@ class Connection(object):
 
     def _on_timeout(self):
         self._clear_timeout()
+        self._clear_close_callback()
         msg = 'Connect timeout' if self._connecting else 'Request timeout'
         self._on_error(exceptions.STPTimeoutError(msg))
 
