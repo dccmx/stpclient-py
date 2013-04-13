@@ -176,6 +176,7 @@ class Connection(object):
         self._write_request()
 
     def _on_timeout(self):
+        self._clear_timeout()
         msg = 'Connect timeout' if self._connecting else 'Request timeout'
         self._on_error(exceptions.STPTimeoutError(msg))
 
@@ -310,6 +311,7 @@ class Client(object):
             self._async_client = AsyncClient(host, port, timeout, connect_timeout, unix_socket, self._io_loop, max_buffer_size)
             self._response = None
         self._connect = connect
+        self._response = None
         self._connect()
 
     @property
@@ -322,6 +324,7 @@ class Client(object):
         self._io_loop.close()
         self._async_client = None
         self._io_loop = None
+        self._response = None
 
     def call(self, request):
         if self.closed:
