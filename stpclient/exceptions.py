@@ -6,13 +6,13 @@ class STPError(Exception):
     pass
 
 
-class STPTimeoutError(Exception):
+class STPTimeoutError(STPError):
     pass
 
 
-class STPNetworkError(Exception):
+class STPNetworkError(STPError):
     pass
 
 
-class STPProtocolError(Exception):
+class STPProtocolError(STPError):
     pass

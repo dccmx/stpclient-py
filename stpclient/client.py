@@ -167,7 +167,7 @@ class Connection(object):
 
     def _on_close(self):
         if self.stream and not self.stream.error:
-            self.stream.error = exceptions.STPNetworkError('Socket closed by remote end')
+            self.stream.error = exceptions.STPNetworkError('Socket seems to be closed by remote end')
         self.io_loop.add_callback(self._on_error)
 
     def _on_connect(self):
@@ -180,11 +180,14 @@ class Connection(object):
         self._on_error(exceptions.STPTimeoutError(msg))
 
     def _on_error(self, e=None):
-        msg = str(self.stream.error) if self.stream is not None and self.stream.error is not None else str(e)
+        if isinstance(e, exceptions.STPError):
+            err = e
+        else:
+            msg = str(self.stream.error) if self.stream is not None and self.stream.error is not None else str(e)
+            err = exceptions.STPNetworkError('%s %s' % (msg, str(self)))
         self.close()
         self._request = None
-        self._run_callback(STPResponse(request_time=time.time() - self.start_time,
-                           error=exceptions.STPNetworkError('%s %s' % (msg, str(self)))))
+        self._run_callback(STPResponse(request_time=time.time() - self.start_time, error=err))
         # reconnect and send remaining requests
         if len(self._request_queue) > 0:
             self._connect_and_write_request()
