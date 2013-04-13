@@ -331,7 +331,11 @@ class Client(object):
         self._io_loop.start()
         response = self._response
         self._response = None
-        response.rethrow()
+        try:
+            response.rethrow()
+        except:
+            self.close()
+            raise
         return response
 
     def __del__(self):
