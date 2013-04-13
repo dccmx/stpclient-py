@@ -4,6 +4,7 @@ import sys
 import socket
 import time
 import collections
+import functools
 from tornado.ioloop import IOLoop
 from tornado.iostream import IOStream
 import exceptions
@@ -172,7 +173,7 @@ class Connection(object):
 
     def _on_close(self):
         if self.stream and not self.stream.error:
-            self.io_loop.add_callback(self._on_error, exceptions.STPNetworkError('Unkown socket error (this should not happen!)'))
+            self.io_loop.add_callback(functools.partial(self._on_error, exceptions.STPNetworkError('Unkown socket error (this should not happen!)')))
         else:
             self.io_loop.add_callback(self._on_error)
 
@@ -244,7 +245,7 @@ class Connection(object):
 
     def _read_arg(self):
         try:
-            self.io_loop.add_callback(self._read_until, b'\r\n', self._on_arglen)
+            self.io_loop.add_callback(functools.partial(self._read_until, b'\r\n', self._on_arglen))
         except Exception as e:
             self._on_error(e)
 
@@ -260,14 +261,14 @@ class Connection(object):
         else:
             try:
                 arglen = int(data[:-2])
-                self.io_loop.add_callback(self._read_bytes, arglen, self._on_arg)
+                self.io_loop.add_callback(functools.partial(self._read_bytes, arglen, self._on_arg))
             except Exception as e:
                 self._on_error(exceptions.STPProtocolError(str(e)))
 
     def _on_arg(self, data):
         self._response._argv.append(data)
         try:
-            self.io_loop.add_callback(self._read_until, b'\r\n', self._on_strip_arg_eol)
+            self.io_loop.add_callback(functools.partial(self._read_until, b'\r\n', self._on_strip_arg_eol))
         except Exception as e:
             self._on_error(e)
 
