@@ -182,6 +182,7 @@ class Connection(object):
         self._clear_timeout()
         self._clear_close_callback()
         msg = 'Connect timeout' if self._connecting else 'Request timeout'
+        msg += ' %s' % str(self)
         self._on_error(exceptions.STPTimeoutError(msg))
 
     def _on_error(self, e=None):

@@ -23,7 +23,8 @@ def test_async():
     _response = ['']
     try:
         response.rethrow()
-    except STPTimeoutError:
+    except STPTimeoutError as e:
+        print e
         time.sleep(2)
     print 'call ping'
     client.call('ping', callback)
