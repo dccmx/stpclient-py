@@ -45,6 +45,12 @@ def test_sync():
     print 'sleep 10s'
     time.sleep(10)
     print 'ping again'
+    try:
+        print client.call('ping').argv
+    except Exception as e:
+        print e
+    time.sleep(10)
+    print 'ping again'
     print client.call('ping').argv
 
 

@@ -173,7 +173,7 @@ class Connection(object):
 
     def _on_close(self):
         if self.stream and not self.stream.error:
-            self.io_loop.add_callback(functools.partial(self._on_error, exceptions.STPNetworkError('Socket closed by remote end')))
+            self.io_loop.add_callback(functools.partial(self._on_error, exceptions.STPNetworkError('Socket closed by remote end %s' % str(self))))
         else:
             self.io_loop.add_callback(self._on_error)
 
