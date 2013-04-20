@@ -13,13 +13,13 @@ def main():
         count = int(sys.argv[3])
     else:
         count = 1
-    client = Client(host, port)
+    client = Client(host, port, timeout=1)
     for i in range(count):
         try:
             print client.call('ping').argv
         except:
-            client.close()
             logging.exception('')
+            client.close()
         time.sleep(0.5)
 
 

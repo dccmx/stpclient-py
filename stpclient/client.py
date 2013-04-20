@@ -333,6 +333,8 @@ class Client(object):
         return self._async_client is None
 
     def close(self):
+        if self.closed:
+            return
         if self._async_client:
             self._async_client.close()
         self._io_loop.close()
