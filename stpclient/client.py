@@ -235,7 +235,7 @@ class Connection(object):
         if self._callback is not None:
             callback = self._callback
             self._callback = None
-            callback(response)
+            self.io_loop.add_callback(functools.partial(callback, response))
 
     def _read_until(self, delimiter, callback):
         self.stream.read_until(delimiter, callback)
